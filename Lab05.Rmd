@@ -65,6 +65,7 @@ df_data %>%
   geom_histogram() + 
   facet_wrap(vars(sexo))
 ```
+
 ## 5. Uno de los gráficos más útiles que existen para revisar la distribución de un vector de valores es el diagrama de cajas que tiene la estructura que se presenta a continuación.
 
 ![imagen](image/imagenlab5.jpeg)
@@ -95,6 +96,267 @@ La función boxplot también permite segmentar por medio de una variable categó
 boxplot( ingresos ~ sexo, df_datos)
 
 ## ¿Qué puede concluir de ese diagrama?
+
+> Se puede observar que al retirtar los outliers, se puede manejar un mejor rango. Los ingresos de hombres sigue siendo mayor que el de las mujeres; Pero al tener valores altos, es medianamente complicado sacar conclusiones directas de los boxplot.
+
+```{r}
+ 
+# Obteniendo cuartiles y el IRQ 
+# calculos para hombres y mujeres
+
+df_data %>%
+  group_by(sexo) %>%
+  select(ingresos_totales) %>%
+  summarize( q2  = quantile(ingresos_totales, 0.50),
+             q1  = quantile(ingresos_totales, 0.25),
+             q3  = quantile(ingresos_totales, 0.75),
+             irq = q3 - q1,
+             li  = q1 - 1.5 * irq,
+             ls  = q3 + 1.5 * irq)
+
+# implementado el boxplot
+
+boxplot(ingresos_totales ~ sexo, data = df_data, col=c('red','green'))
+```
+
+## 6. Mejore el diagrama aplicando la función log a los ingresos, ¿Qué puede concluir sobre los ingresos por género?
+> Al implementar log a ingresos, nos da valores mas cortos. Lo cual, nos permite realizar mejor el analisis.
+> Ahora se puede observar, igual que el anterior que el ingreso de hombres es mayor que mujeres. Pero al obsevar de mujeres se que tiene mayor amplitud IRQ, lo cual demuestra mayor dispercion en los ingresos.
+
+```{r}
+# utilizando log (ingresos)
+
+boxplot(log_ingresos ~ sexo, data = df_data, col=c('orange','grey'))
+
+```
+
+## 7. Realice un diagrama de dispersión de ingresos por edad.
+
+```{r}
+
+df_data %>% ggplot(aes( x = edad, y = log_ingresos, color = sexo)) + 
+  geom_point()
+
+```
+
+## 8.Plantee una regresión lineal entre ingresos y edad, grafique la línea de regresión sobre el diagrama de dispersión.
+
+```{r}
+
+# modelo  variable sexo
+
+df_data_modelo <-df_data %>%
+  group_by(sexo) %>%
+  select(log_ingresos,edad,sexo) %>%
+  summarize( log_ingresos,
+             edad,
+             sexo,
+             q2  = quantile(log_ingresos, 0.50),
+             q1  = quantile(log_ingresos, 0.25),
+             q3  = quantile(log_ingresos, 0.75),
+             irq = q3 - q1,
+             li  = 0,
+             ls  = q3 + 1.5 * irq)|>
+  filter(log_ingresos>li & log_ingresos<ls)|>
+  select ( log_ingresos, edad, sexo)
+
+mod_1 <- lm( log_ingresos ~ edad + sexo, 
+             data = df_data_modelo)
+
+summary(mod_1)
+
+
+
+# modelos separados
+# para mujeres
+
+df_data_modelo_m <- df_data_modelo |>
+  filter( sexo == "mujer" ) |>
+  select ( log_ingresos, edad, sexo)
+
+
+mod_1_m <- lm( log_ingresos ~ edad,  
+             data = df_data_modelo_m)
+
+summary(mod_1_m)
+
+
+# para hombres
+df_data_modelo_h <- df_data_modelo |>
+  filter( sexo == "hombre" ) |>
+  select ( log_ingresos, edad, sexo)
+
+
+mod_1_h <- lm( log_ingresos ~ edad,  
+             data = df_data_modelo_h)
+
+summary(mod_1_h)
+
+# graficamos
+plot(x = df_data$edad, y = df_data$log_ingresos) # grafica el diagrama de dispersión
+abline(mod_1_m, col="red" ) # añade la línea de regresión
+abline(mod_1_h, col="blue" ) # añade la línea de regresión
+
+```
+
+## 9. Plantee un gráfico de y vs y_estimado, ¿Qué puede concluir?
+
+> Al hace predicciones originales, se puede observar que en un estimado de tiempo los sueldo aumentaran, pero se mantedran las diferencias entre ambos generos, siempre y cuando no se haga un cambio significativo.
+
+```{r}
+library(scatterplot3d)
+
+mi_3d <- scatterplot3d(x=df_data_modelo$edad,
+                       y=df_data_modelo$log_ingresos, 
+                       mod_1$fitted.values, 
+                       color = ifelse(df_data_modelo$sexo == "mujer", "red", "blue"),
+                       main = "Regresión Múltiple",
+                       xlab = "Edad",
+                       ylab = "Log ingresos",
+                       zlab = "Log ingresos Estimados"
+                       )
+
+legend("topright", legend = c("Hombre", "Mujer"), col = c("blue", "red"), pch = c(16))
+```
+
+
+# 10. Plantee un modelo de regresión lineal multiple
+
+>Para el ejercicio, se tomara datos del Ministerio de educacion del peru, asimismo, se tomara como mitad de tiempo de estudios en casos de educacion incompleta. Los datos a tomar seran:
+
+```{r}
+df_anios_escolaridad <- data.frame(
+  estudios = c("sin nivel","inicial","primaria incompleta","primaria completa",
+               "secundaria incompleta","secundaria completa","superior no universitaria incompleta","superior no universitaria completa",
+               "superior universitaria incompleta","superior universitaria completa","maestria/doctorado","basica especial" ),
+  anios = c(0,2,3,6,2.5,5,1.5,3,2.5,5,5,20),
+  anios_escolaridad = c(0,2,5,8,10.5,13,14.5,16,15.5,18,23,20)
+)
+
+print(df_anios_escolaridad)
+```
+
+
+## a. Ingreso = f(edad, años de escolaridad, género)
+
+```{r}
+## verficando si la columna estudio esta limpia
+
+print(any(is.na(df_data$estudios))) #na
+
+cantidad_vacios <- sum(df_data$estudios == "") #string vacios
+print(cantidad_vacios) #se encontro solo 1, no supera el 10%
+
+## dropping Data
+
+print(names(df_data))
+
+df_data_estudios <- filter(df_data, estudios != "")
+
+str(df_data$estudios)
+str(df_data_estudios$estudios)
+
+# Mostrar los datos presentes en la columna
+
+print(unique(df_data_estudios$estudios))
+
+# corregir dato de eduacion basica especial
+df_data_estudios <- df_data_estudios %>%
+  mutate(estudios = ifelse(estudios == 'b\xa0sica especial', 'basica especial', estudios))
+
+print(unique(df_data_estudios$estudios))
+
+# incluir la nueva columna anios de escolaridad.
+
+# Realizar left join basado en la columna 'estudios'
+df_data_estudios <- left_join(df_data_estudios, df_anios_escolaridad, by = "estudios") %>%
+  select(-anios)  # Excluir la columna 'anios' de df_escolaridad
+
+
+
+```
+
+## b. Aplique las técnicas reseñadas en la parte de teoría para eliminar los outliers.
+
+```{r}
+
+# imprimir histogramas
+
+df_data_estudios %>%
+  ggplot(aes(x = anios_escolaridad)) + 
+  geom_histogram(binwidth = 2) + 
+  facet_wrap(vars(sexo))
+
+# Aplicando las tecnica para eliminar outliers
+
+df_data_estudios <-df_data_estudios %>%
+  group_by(sexo) %>%
+  select(anios_escolaridad,edad,sexo) %>%
+  summarize( anios_escolaridad,
+             edad,
+             sexo,
+             q2  = quantile(anios_escolaridad, 0.50),
+             q1  = quantile(anios_escolaridad, 0.25),
+             q3  = quantile(anios_escolaridad, 0.75),
+             irq = q3 - q1,
+             li  = q1 - 1.5 * irq,
+             ls  = q3 + 1.5 * irq)|>
+  filter(anios_escolaridad>li & anios_escolaridad<ls)|>
+  select (anios_escolaridad, edad, sexo)
+
+boxplot(anios_escolaridad ~ sexo, data = df_data_estudios, col=c('orange','grey'))
+```
+
+## c. Revise la significancia de las variables.
+
+>Los p-values asociados con los coeficientes son todos muy pequeños (menores que 0.05), lo que sugiere que hay evidencia estadística para afirmar que los coeficientes son diferentes de cero.
+
+```{r}
+mod_escolaridad <- lm( anios_escolaridad ~ edad + sexo, 
+             data = df_data_estudios)
+
+summary(mod_escolaridad)
+
+```
+
+## d. Proponga los gráficos y tablas para sus hallazgos
+
+```{r}
+
+# Estimaciones
+
+summary(mod_escolaridad$fitted.values)
+
+
+mi_3d_escolaridad <- scatterplot3d(x=df_data_estudios$edad,
+                       y=df_data_estudios$anios_escolaridad, 
+                       mod_escolaridad$fitted.values, 
+                       color = ifelse(df_data_estudios$sexo == "mujer", "red", "purple"),
+                       main = "Regresión Múltiple",
+                       xlab = "Edad",
+                       ylab = "Años Escolaridad",
+                       zlab = "Años Escolaridad Estimados"
+                       )
+legend("topright", legend = c("Mujer", "hombre"), col = c("red", "purple"), pch = c(16))
+
+# tabla de coeficientes del modelo de regresion multiple
+coeficientes_mod <- coef(mod_escolaridad)
+tabla_coeficientes <- as.data.frame(coeficientes_mod)
+print(tabla_coeficientes)
+
+```
+
+## e. Presente sus conclusiones
+
+> - Gracias a los diagramas de caja (boxplot), se observa una mayor dispersión en los años de escolaridad de los hombres. Asimismo, la dispersión en los años de escolaridad de las mujeres es menor, lo cual podría estar relacionado con la menor presencia de datos para este grupo. Sin embargo, es importante señalar que los años de escolaridad de las mujeres tienden a ser mayores que los de los hombres.
+
+> - Se puede observar que el coeficiente de edad es -0.12966, lo cual indica un decrecimiento en la educación a medida que aumenta la edad. Este resultado es un buen indicador, ya que sugiere una tendencia a estudiar en personas más jóvenes.
+
+> - El coeficiente para mujeres es 0.828, lo que indica que se espera un aumento en los años de escolaridad femenina en comparación con los hombres en esta categoría. Sin embargo, esto no sugiere una eliminación de la brecha salarial o una mayor participación de las mujeres, pero sí indica una mayor capacitación educativa en este grupo.
+
+
+
+
 
 
 
